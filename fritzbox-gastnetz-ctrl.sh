@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Skript zum einfachen Steuern und Konfigurieren des Gast-Netzes
-# einer FRITZ!Box per Kommandozeile (Version 1.0)
+# einer FRITZ!Box per Kommandozeile (Version 1.0.1)
 # Download unter: https://github.com/lrswss/fritzbox-gast-ctrl
 #
 # (c) 2021 Lars Wessels <software@bytebox.org>
@@ -26,12 +26,13 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 #
 
-# Hier Benutzer und Passwort für den Zugriff auf die FRITZ!Box setzen.
-# Der eingestellte Benutzer benötigt Rechte für 'FRITZ!Box Einstellungen'
+# Hier Benutzer und Passwort für den Zugriff auf die FRITZ!Box setzen;
+# der eingestellte Benutzer benötigt Rechte für 'FRITZ!Box Einstellungen'.
 USERNAME="fritzbox"
 PASSWORD="xxxxxxxx"
 
-# Adresse der FRITZ!Box muss i.d.R. nicht geänder, TR64 auf Port 49000
+# Die Hostname der FRITZ!Box muss i.d.R. nicht geändert werden.
+# Der TR-064 Dienst läuft auf Port 49000.
 FB_IP_PORT="fritz.box:49000"
 
 # Zuerst prüfen, ob curl installiert ist.
@@ -41,7 +42,7 @@ if [ -z "$CURL" ]; then
 	exit 1
 fi
 
-# Kommandos können aus groß geschrieben werden
+# Die Kommandozeilenoptionen können auch groß geschrieben werden.
 if [ $# != 0 ]; then
 	CMD=`echo $1 | tr /A-Z/ /a-z/`
 fi
@@ -54,7 +55,7 @@ if [ $# == 0 ] || [ "$CMD" != "an" -a "$CMD" != "aus" -a "$CMD" != "info" \
 fi
 
 # TR-064 aktiviert?
-SOAPINFO=$($CURL -s http://fritz.box:49000/tr64desc.xml)
+SOAPINFO=$($CURL -s http://${FB_IP_PORT}/tr64desc.xml)
 if [ -n "$(echo $SOAPINFO | grep ERR_NOT_FOUND)" ]; then
 	echo "Bitte zuerst TR64-Schnittstelle in der FRITZ!Box aktivieren!"
 	echo "Heimnetz > Netwerk > Netwerkeinstellungen > Weiter Einstellungen > Zugriff für Anwendungen zulassen".
@@ -65,7 +66,7 @@ fi
 # https://stackoverflow.com/questions/893585/how-to-parse-xml-in-bash
 read_xml() { local IFS=\> ; read -d \< TAG CONTENT ;}
 
-# FRITZ!Box Model und Firmware-Version auslesen
+# FRITZ!Box Modell und Firmware-Version auslesen
 while read_xml; do
 	if [ "$TAG" = "Minor" ]; then
 		MINOR=$CONTENT
@@ -94,11 +95,11 @@ RES=$($CURL -s -k --anyauth -u "${USERNAME}:${PASSWORD}" \
 if [ -n "$(echo $RES | grep Unauthorized)" ]; then
 	echo "Anmeldung an der FRITZ!Box fehlgeschlagen! Bitte sicherstellen, dass sich"
 	echo "die Benutzerkennung '$USERNAME' mit dem Passwort '$PASSWORD' an der FRITZ!Box"
-	echo "anmelden kann und die Berechtigung 'FRITZ!Box Einstellungen' hat."
+	echo "anmelden kann und die Berechtigung für 'FRITZ!Box Einstellungen' hat."
 	exit 1
 fi
 
-# Einige Werte aus der XML-Antworten parsen
+# Einige Werte aus der XML-Antwort parsen
 while read_xml; do
 	if [ "$TAG" = "NewSSID" ]; then
 		SSID=$CONTENT
@@ -109,7 +110,7 @@ while read_xml; do
 	fi 
 done <<< $(echo $RES)
 
-# aktuelles Passwort für Gast-Netz auslesen
+# aktuelles Passwort für das Gast-Netz auslesen
 RES=$($CURL -s -k --anyauth -u "${USERNAME}:${PASSWORD}" \
 	http://${FB_IP_PORT}/upnp/control/wlanconfig3 \
 	-H 'Content-Type: text/xml; charset="utf-8"' \
@@ -123,8 +124,8 @@ RES=$($CURL -s -k --anyauth -u "${USERNAME}:${PASSWORD}" \
 			</s:Body>
 		</s:Envelope>")
 
-# alle Werte für ggf. späteteres Setzen
-# eines neues WPA-Schlüssels merken...
+# Alle Werte für ggf. späteteres Setzen
+# eines neuen WPA-Schlüssels merken...
 while read_xml; do
 	if [ "$TAG" = "NewWEPKey0" ]; then
 		WEBKEY0=$CONTENT
@@ -156,7 +157,7 @@ fi
 # Gast-Netz ein/auschalten
 if [ "$CMD" = "an" -o "$CMD" = "aus" ]; then
 	if [ "$CMD" = "an" ]; then
-		echo -n "Gast-Netz '$SSID' wird eingeschalten..."
+		echo -n "Gast-Netz '$SSID' wird eingeschaltet..."
 		ENABLE=true
 	else
 		echo -n "Gast-Netz '$SSID' wird abgeschaltet..."
@@ -202,7 +203,7 @@ if [ "$CMD" = "ssid" ]; then
 		exit 1
 	fi
 
-	echo -n "Setze neue Netwerkennung '$SSID'..."
+	echo -n "Setze neue Netzwerkennung '$SSID'..."
 	RES=$($CURL -s -k --anyauth -u "${USERNAME}:${PASSWORD}" \
 		http://${FB_IP_PORT}/upnp/control/wlanconfig3 \
 		-H 'Content-Type: text/xml; charset="utf-8"' \
@@ -227,7 +228,7 @@ fi
 # neues WPA-Passwort per SOAP setzen
 if [ "$CMD" = "passwort" ]; then
 	echo "Neues WPA-Passwort für Gast-Netz '$SSID' setzen:"
-	echo -n "Passwort eingebnen: "
+	echo -n "Neues Passwort eingeben (min. 8 Zeichen): "
 	read -s PASS1
 	echo
 	echo -n "Wiederholen: "
@@ -235,7 +236,7 @@ if [ "$CMD" = "passwort" ]; then
 	echo
 
 	if [ "$PASS1" != "$PASS2" ]; then
-		echo "Die eingebenen Passwörter stimmen nicht überein!"
+		echo "Die eingegebenen Passwörter stimmen nicht überein!"
 		exit
 	fi
 
@@ -276,7 +277,7 @@ if [ "$CMD" = "passwort" ]; then
 fi
 
 
-# Liste mit am Gast-Netz angemeldeten WLAN-Clients ausgeben
+# Liste mit den am Gast-Netz angemeldeten WLAN-Clients ausgeben
 if [ "$CMD" = "clients" ]; then
 	RES=$($CURL -s -k --anyauth -u "${USERNAME}:${PASSWORD}" \
 		http://${FB_IP_PORT}/upnp/control/wlanconfig3 \
@@ -318,7 +319,7 @@ if [ "$CMD" = "clients" ]; then
 					xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\">
 					<s:Body>
 						<u:GetGenericAssociatedDeviceInfo xmlns:u=\"urn:dslforum-org:service:WLANConfiguration:3\">
-							<NewAssociatedDeviceIndex>$((CLIENTS-1))</NewAssociatedDeviceIndex>
+							<NewAssociatedDeviceIndex>$((NUM-1))</NewAssociatedDeviceIndex>
 						</u:GetGenericAssociatedDeviceInfo>
 					</s:Body>
 				</s:Envelope>")
